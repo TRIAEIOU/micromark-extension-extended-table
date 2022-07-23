@@ -63,6 +63,11 @@ export const extendedTableHtml = {
       this.setData('tableColumn', 0)
       this.lineEndingIfNeeded()
       this.tag('<tr>')
+    },
+    tableHeaderRow() {
+      this.setData('tableColumn', 0)
+      this.lineEndingIfNeeded()
+      this.tag('<tr>')
     }
   },
   exit: {
@@ -129,7 +134,24 @@ export const extendedTableHtml = {
       this.setData('tableColumn', tableColumn)
       this.lineEndingIfNeeded()
       this.tag('</tr>')
-    }
+    },
+    tableHeaderRow() {
+      const tableAlign = /** @type {Array<Align>} */ (
+        this.getData('tableAlign')
+      )
+      let tableColumn = /** @type {number} */ (this.getData('tableColumn'))
+
+      while (tableColumn < tableAlign.length) {
+        this.lineEndingIfNeeded()
+        this.tag('<th' + alignment[tableAlign[tableColumn]] + '></th>')
+        tableColumn++
+      }
+      
+      this.setData('tableColumn', tableColumn)
+      this.lineEndingIfNeeded()
+      this.tag('</tr>')
+
+    } 
   }
 }
 

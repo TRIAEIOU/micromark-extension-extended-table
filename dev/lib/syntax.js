@@ -178,6 +178,8 @@ function tokenizeTable(effects, ok, nok) {
   const align = [];
   /** @type {number} */
   let lastColCount; // # of cols in last header or body row (not delimiter)
+  /** @type {'gfm'|'delimiter'|'body'|undefined} */
+  let tableType;
   return tableStart
 
   /**
@@ -212,6 +214,7 @@ function tokenizeTable(effects, ok, nok) {
     self.nok = nok;
     self.ok = ok;
     align.length = 0;
+    tableType = 'gfm';
     return header;
   }
 
@@ -256,6 +259,7 @@ function tokenizeTable(effects, ok, nok) {
     self.nok = nok;
     self.ok = ok;
     align.length = 0;
+    tableType = 'delimiter';
     return delimiter;
   }
 
@@ -422,6 +426,7 @@ function tokenizeTable(effects, ok, nok) {
     self.nok = nok;
     self.ok = ok;
     align.length = 0;
+    tableType = 'body';
     return body;
   }
 
@@ -447,6 +452,9 @@ function tokenizeTable(effects, ok, nok) {
     function rowEnd(code) {
       effects.exit('tableRow');
       if (!lastColCount) return self.nok(code);
+      if (tableType === 'body') {
+        while (lastColCount > align.length) align.push('none');
+      }
       if (code === codes.eof) return bodyClose(code);
       effects.enter(types.lineEnding);
       effects.consume(code);
