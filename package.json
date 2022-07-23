@@ -43,8 +43,7 @@
     "micromark-factory-space": "^1.0.0",
     "micromark-util-character": "^1.0.0",
     "micromark-util-symbol": "^1.0.0",
-    "micromark-util-types": "^1.0.0",
-    "uvu": "^0.5.0"
+    "micromark-util-types": "^1.0.0"
   },
   "devDependencies": {
     "@types/tape": "^4.0.0",
@@ -59,6 +58,7 @@
     "tape": "^5.0.0",
     "type-coverage": "^2.0.0",
     "typescript": "^4.0.0",
+    "uvu": "^0.5.6",
     "xo": "^0.50.0"
   },
   "scripts": {

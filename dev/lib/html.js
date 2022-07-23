@@ -15,7 +15,7 @@ const alignment = {
  *
  * @type {HtmlExtension}
  */
-export const gfmTableHtml = {
+export const extendedTableHtml = {
   enter: {
     table(token) {
       /** @type {Array<Align>} */

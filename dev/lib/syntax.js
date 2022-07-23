@@ -4,6 +4,7 @@
  * @typedef {import('micromark-util-types').Tokenizer} Tokenizer
  * @typedef {import('micromark-util-types').State} State
  * @typedef {import('micromark-util-types').Token} Token
+ * @typedef {import('micromark-util-types').Code} Code
  */
 
 /**
@@ -11,10 +12,8 @@
  */
 
 import {ok as assert} from 'uvu/assert'
-import {factorySpace} from 'micromark-factory-space'
 import {
   markdownLineEnding,
-  markdownLineEndingOrSpace,
   markdownSpace
 } from 'micromark-util-character'
 import {codes} from 'micromark-util-symbol/codes.js'
@@ -26,13 +25,17 @@ import {types} from 'micromark-util-symbol/types.js'
  *
  * @type {Extension}
  */
-export const gfmTable = {
+export const extendedTable = {
+  // @ts-ignore - FIXME: why does this all of a sudden cause typing error?
   flow: {null: {tokenize: tokenizeTable, resolve: resolveTable}}
 }
 
-const nextPrefixedOrBlank = {
-  tokenize: tokenizeNextPrefixedOrBlank,
-  partial: true
+/**
+ * @param {Code} code 
+ * @returns {boolean}
+ */
+function markdownTableCellContent(code) {
+  return !markdownSpace(code) && code !== codes.verticalBar && !markdownLineEnding(code) && code !== codes.eof;
 }
 
 /** @type {Resolver} */
@@ -65,7 +68,7 @@ function resolveTable(events, context) {
 
       if (
         // Combine separate content parts into one.
-        (token.type === 'tableCellDivider' || token.type === 'tableRow') &&
+        (token.type === 'tableCellDivider' || token.type === 'tableRow' || token.type === 'tableHeaderRow') &&
         contentEnd
       ) {
         assert(
@@ -111,7 +114,7 @@ function resolveTable(events, context) {
       cellStart !== undefined &&
       cellStart + (seenCellInRow ? 0 : 1) < index &&
       (token.type === 'tableCellDivider' ||
-        (token.type === 'tableRow' &&
+        ((token.type === 'tableRow' || token.type === 'tableHeaderRow') &&
           (cellStart + 3 < index ||
             events[cellStart][1].type !== types.whitespace)))
     ) {
@@ -135,7 +138,7 @@ function resolveTable(events, context) {
       seenCellInRow = true
     }
 
-    if (token.type === 'tableRow') {
+    if (token.type === 'tableRow' || token.type === 'tableHeaderRow') {
       inRow = events[index][0] === 'enter'
 
       if (inRow) {
@@ -161,484 +164,439 @@ function resolveTable(events, context) {
   return events
 }
 
-/** @type {Tokenizer} */
+/***********************************************
+ * Create tokenizer for entire table (will use subtokenizers
+ * for header, delimiter and body rows
+ * @type {Tokenizer}
+ */
 function tokenizeTable(effects, ok, nok) {
-  const self = this
+  let self = this;
+  // Need to save these to call in right scope
+  self.nok = nok;
+  self.ok = ok;
   /** @type {Array<Align>} */
-  const align = []
-  let tableHeaderCount = 0
-  /** @type {boolean|undefined} */
-  let seenDelimiter
-  /** @type {boolean|undefined} */
-  let hasDash
+  const align = [];
+  /** @type {number} */
+  let lastColCount; // # of cols in last header or body row (not delimiter)
+  return tableStart
 
-  return start
-
-  /** @type {State} */
-  function start(code) {
-    // @ts-expect-error Custom.
-    effects.enter('table')._align = align
-    effects.enter('tableHead')
-    effects.enter('tableRow')
-
-    // If we start with a pipe, we open a cell marker.
-    if (code === codes.verticalBar) {
-      return cellDividerHead(code)
-    }
-
-    tableHeaderCount++
-    effects.enter('temporaryTableCellContent')
-    // Can’t be space or eols at the start of a construct, so we’re in a cell.
-    assert(!markdownLineEndingOrSpace(code), 'expected non-space')
-    return inCellContentHead(code)
+  /**
+   * Attempt to tokenize as GFM-table, then headerless table with and
+   * delimiter/alignment, then table body only
+   * @type {State}
+   */
+  function tableStart(code) {
+    // @ts-ignore
+    effects.enter('table')._align = align;
+    return effects.attempt([ // Will attempt seuqentially until one ok's
+        { tokenize: tokenizeHeader, partial: true },
+        { tokenize: tokenizeDelimiter, partial: true },
+        { tokenize: tokenizeBody, partial: true },
+      ],
+      function (code) { // On success close table and done
+        self.ok = ok;
+        self.nok = nok;
+        return tableClose(code);
+      },      
+      nok // No table pattern found
+    )(code);
   }
 
-  /** @type {State} */
-  function cellDividerHead(code) {
-    assert(code === codes.verticalBar, 'expected `|`')
-    effects.enter('tableCellDivider')
-    effects.consume(code)
-    effects.exit('tableCellDivider')
-    seenDelimiter = true
-    return cellBreakHead
+  /**
+   * Create tokenizer for header row
+   * @type {Tokenizer}
+   */
+  function tokenizeHeader(effects, ok, nok) {
+    // @ts-ignore
+    self = this; // Has to be set as tokenizers are called with an object
+    self.nok = nok;
+    self.ok = ok;
+    align.length = 0;
+    return header;
   }
 
-  /** @type {State} */
-  function cellBreakHead(code) {
-    if (code === codes.eof || markdownLineEnding(code)) {
-      return atRowEndHead(code)
-    }
+  /***********************************************
+   * Tokenize line as head, chain to delimiter row if successful or nok()
+   * @type {State}
+   */
+  function header(code) {
+    effects.enter('tableHead');
+    effects.enter('tableHeaderRow');
+    return nonDelimiterRow(rowEnd, code);
 
-    if (markdownSpace(code)) {
-      effects.enter(types.whitespace)
-      effects.consume(code)
-      return inWhitespaceHead
-    }
-
-    if (seenDelimiter) {
-      seenDelimiter = undefined
-      tableHeaderCount++
-    }
-
-    if (code === codes.verticalBar) {
-      return cellDividerHead(code)
-    }
-
-    // Anything else is cell content.
-    effects.enter('temporaryTableCellContent')
-    return inCellContentHead(code)
-  }
-
-  /** @type {State} */
-  function inWhitespaceHead(code) {
-    if (markdownSpace(code)) {
-      effects.consume(code)
-      return inWhitespaceHead
-    }
-
-    effects.exit(types.whitespace)
-    return cellBreakHead(code)
-  }
-
-  /** @type {State} */
-  function inCellContentHead(code) {
-    // EOF, whitespace, pipe
-    if (
-      code === codes.eof ||
-      code === codes.verticalBar ||
-      markdownLineEndingOrSpace(code)
-    ) {
-      effects.exit('temporaryTableCellContent')
-      return cellBreakHead(code)
-    }
-
-    effects.consume(code)
-    return code === codes.backslash
-      ? inCellContentEscapeHead
-      : inCellContentHead
-  }
-
-  /** @type {State} */
-  function inCellContentEscapeHead(code) {
-    if (code === codes.backslash || code === codes.verticalBar) {
-      effects.consume(code)
-      return inCellContentHead
-    }
-
-    // Anything else.
-    return inCellContentHead(code)
-  }
-
-  /** @type {State} */
-  function atRowEndHead(code) {
-    if (code === codes.eof) {
-      return nok(code)
-    }
-
-    assert(markdownLineEnding(code), 'expected eol')
-    effects.exit('tableRow')
-    effects.exit('tableHead')
-    const originalInterrupt = self.interrupt
-    self.interrupt = true
-    return effects.attempt(
-      {tokenize: tokenizeRowEnd, partial: true},
-      function (code) {
-        self.interrupt = originalInterrupt
-        effects.enter('tableDelimiterRow')
-        return atDelimiterRowBreak(code)
-      },
-      function (code) {
-        self.interrupt = originalInterrupt
-        return nok(code)
+    /***********************************************
+    * End of head row - close and check that table is not
+    * interrupted on next line then chain to delimiter row
+    * @type {State}
+    */
+     function rowEnd(code) {
+      // No cols found (i.e. not a table) or eof (header only tables not allowed)
+      if (!lastColCount || code === codes.eof) {
+        return self.nok(code);
       }
-    )(code)
-  }
+      effects.exit('tableHeaderRow');
+      effects.exit('tableHead');
+      effects.enter(types.lineEnding);
+      effects.consume(code);
+      effects.exit(types.lineEnding);
+      return nextLine;
 
-  /** @type {State} */
-  function atDelimiterRowBreak(code) {
-    if (code === codes.eof || markdownLineEnding(code)) {
-      return rowEndDelimiter(code)
+      /** @type {State} */
+      function nextLine(code) {
+        if (tableContinues(self, code)) { return delimiter(code); }
+        return self.nok(code); // No header row only tables
+      }
     }
-
-    if (markdownSpace(code)) {
-      effects.enter(types.whitespace)
-      effects.consume(code)
-      return inWhitespaceDelimiter
-    }
-
-    if (code === codes.dash) {
-      effects.enter('tableDelimiterFiller')
-      effects.consume(code)
-      hasDash = true
-      align.push('none')
-      return inFillerDelimiter
-    }
-
-    if (code === codes.colon) {
-      effects.enter('tableDelimiterAlignment')
-      effects.consume(code)
-      effects.exit('tableDelimiterAlignment')
-      align.push('left')
-      return afterLeftAlignment
-    }
-
-    // If we start with a pipe, we open a cell marker.
-    if (code === codes.verticalBar) {
-      effects.enter('tableCellDivider')
-      effects.consume(code)
-      effects.exit('tableCellDivider')
-      return atDelimiterRowBreak
-    }
-
-    return nok(code)
-  }
-
-  /** @type {State} */
-  function inWhitespaceDelimiter(code) {
-    if (markdownSpace(code)) {
-      effects.consume(code)
-      return inWhitespaceDelimiter
-    }
-
-    effects.exit(types.whitespace)
-    return atDelimiterRowBreak(code)
-  }
-
-  /** @type {State} */
-  function inFillerDelimiter(code) {
-    if (code === codes.dash) {
-      effects.consume(code)
-      return inFillerDelimiter
-    }
-
-    effects.exit('tableDelimiterFiller')
-
-    if (code === codes.colon) {
-      effects.enter('tableDelimiterAlignment')
-      effects.consume(code)
-      effects.exit('tableDelimiterAlignment')
-
-      align[align.length - 1] =
-        align[align.length - 1] === 'left' ? 'center' : 'right'
-
-      return afterRightAlignment
-    }
-
-    return atDelimiterRowBreak(code)
-  }
-
-  /** @type {State} */
-  function afterLeftAlignment(code) {
-    if (code === codes.dash) {
-      effects.enter('tableDelimiterFiller')
-      effects.consume(code)
-      hasDash = true
-      return inFillerDelimiter
-    }
-
-    // Anything else is not ok.
-    return nok(code)
-  }
-
-  /** @type {State} */
-  function afterRightAlignment(code) {
-    if (code === codes.eof || markdownLineEnding(code)) {
-      return rowEndDelimiter(code)
-    }
-
-    if (markdownSpace(code)) {
-      effects.enter(types.whitespace)
-      effects.consume(code)
-      return inWhitespaceDelimiter
-    }
-
-    // `|`
-    if (code === codes.verticalBar) {
-      effects.enter('tableCellDivider')
-      effects.consume(code)
-      effects.exit('tableCellDivider')
-      return atDelimiterRowBreak
-    }
-
-    return nok(code)
-  }
-
-  /** @type {State} */
-  function rowEndDelimiter(code) {
-    effects.exit('tableDelimiterRow')
-
-    // Exit if there was no dash at all, or if the header cell count is not the
-    // delimiter cell count.
-    if (!hasDash || tableHeaderCount !== align.length) {
-      return nok(code)
-    }
-
-    if (code === codes.eof) {
-      return tableClose(code)
-    }
-
-    assert(markdownLineEnding(code), 'expected eol')
-    return effects.check(
-      nextPrefixedOrBlank,
-      tableClose,
-      effects.attempt(
-        {tokenize: tokenizeRowEnd, partial: true},
-        factorySpace(effects, bodyStart, types.linePrefix, constants.tabSize),
-        tableClose
-      )
-    )(code)
-  }
-
-  /** @type {State} */
-  function tableClose(code) {
-    effects.exit('table')
-    return ok(code)
-  }
-
-  /** @type {State} */
-  function bodyStart(code) {
-    effects.enter('tableBody')
-    return rowStartBody(code)
-  }
-
-  /** @type {State} */
-  function rowStartBody(code) {
-    effects.enter('tableRow')
-
-    // If we start with a pipe, we open a cell marker.
-    if (code === codes.verticalBar) {
-      return cellDividerBody(code)
-    }
-
-    effects.enter('temporaryTableCellContent')
-    // Can’t be space or eols at the start of a construct, so we’re in a cell.
-    return inCellContentBody(code)
-  }
-
-  /** @type {State} */
-  function cellDividerBody(code) {
-    assert(code === codes.verticalBar, 'expected `|`')
-    effects.enter('tableCellDivider')
-    effects.consume(code)
-    effects.exit('tableCellDivider')
-    return cellBreakBody
-  }
-
-  /** @type {State} */
-  function cellBreakBody(code) {
-    if (code === codes.eof || markdownLineEnding(code)) {
-      return atRowEndBody(code)
-    }
-
-    if (markdownSpace(code)) {
-      effects.enter(types.whitespace)
-      effects.consume(code)
-      return inWhitespaceBody
-    }
-
-    // `|`
-    if (code === codes.verticalBar) {
-      return cellDividerBody(code)
-    }
-
-    // Anything else is cell content.
-    effects.enter('temporaryTableCellContent')
-    return inCellContentBody(code)
-  }
-
-  /** @type {State} */
-  function inWhitespaceBody(code) {
-    if (markdownSpace(code)) {
-      effects.consume(code)
-      return inWhitespaceBody
-    }
-
-    effects.exit(types.whitespace)
-    return cellBreakBody(code)
-  }
-
-  /** @type {State} */
-  function inCellContentBody(code) {
-    // EOF, whitespace, pipe
-    if (
-      code === codes.eof ||
-      code === codes.verticalBar ||
-      markdownLineEndingOrSpace(code)
-    ) {
-      effects.exit('temporaryTableCellContent')
-      return cellBreakBody(code)
-    }
-
-    effects.consume(code)
-    return code === codes.backslash
-      ? inCellContentEscapeBody
-      : inCellContentBody
-  }
-
-  /** @type {State} */
-  function inCellContentEscapeBody(code) {
-    if (code === codes.backslash || code === codes.verticalBar) {
-      effects.consume(code)
-      return inCellContentBody
-    }
-
-    // Anything else.
-    return inCellContentBody(code)
-  }
-
-  /** @type {State} */
-  function atRowEndBody(code) {
-    effects.exit('tableRow')
-
-    if (code === codes.eof) {
-      return tableBodyClose(code)
-    }
-
-    return effects.check(
-      nextPrefixedOrBlank,
-      tableBodyClose,
-      effects.attempt(
-        {tokenize: tokenizeRowEnd, partial: true},
-        factorySpace(
-          effects,
-          rowStartBody,
-          types.linePrefix,
-          constants.tabSize
-        ),
-        tableBodyClose
-      )
-    )(code)
-  }
-
-  /** @type {State} */
-  function tableBodyClose(code) {
-    effects.exit('tableBody')
-    return tableClose(code)
   }
 
   /** @type {Tokenizer} */
-  function tokenizeRowEnd(effects, ok, nok) {
-    return start
+  function tokenizeDelimiter(effects, ok, nok) {
+    // @ts-ignore
+    self = this; // Has to be set as tokenizers are called with an object
+    self.nok = nok;
+    self.ok = ok;
+    align.length = 0;
+    return delimiter;
+  }
 
-    /** @type {State} */
-    function start(code) {
-      assert(markdownLineEnding(code), 'expected eol')
-      effects.enter(types.lineEnding)
-      effects.consume(code)
-      effects.exit(types.lineEnding)
-      return factorySpace(effects, prefixed, types.linePrefix)
+  /** @type {State} */
+  function delimiter(code) {
+    /** @type {Align} */
+    let _align = 'none';
+    effects.enter('tableDelimiterRow');
+    if (code === codes.verticalBar) {
+      return divider(code);
+    }
+    return cellStart(code);
+
+    /***********************************************
+     * Tokenize and consume divider, continue to space or line end
+     * @type {State}
+     */
+    function divider(code) {
+      effects.enter('tableCellDivider');
+      effects.consume(code);
+      effects.exit('tableCellDivider');
+      return cellStart;
     }
 
-    /** @type {State} */
-    function prefixed(code) {
-      // Blank or interrupting line.
-      if (
-        self.parser.lazy[self.now().line] ||
-        code === codes.eof ||
-        markdownLineEnding(code)
-      ) {
-        return nok(code)
+    /***********************************************
+     * Tokenize any left space and continue to content
+     * @type {State}
+     */
+    function cellStart(code) {
+      if (markdownLineEnding(code) || code === codes.eof) {
+        return rowEnd(code);
       }
 
-      const tail = self.events[self.events.length - 1]
-
-      // Indented code can interrupt delimiter and body rows.
-      if (
-        !self.parser.constructs.disable.null.includes('codeIndented') &&
-        tail &&
-        tail[1].type === types.linePrefix &&
-        tail[2].sliceSerialize(tail[1], true).length >= constants.tabSize
-      ) {
-        return nok(code)
+      if (markdownSpace(code)) {
+        effects.enter(types.whitespace);
+        return eatSpace(code);
       }
 
-      self._gfmTableDynamicInterruptHack = true
+      return contentStart(code);
 
-      return effects.check(
-        self.parser.constructs.flow,
-        function (code) {
-          self._gfmTableDynamicInterruptHack = false
-          return nok(code)
-        },
-        function (code) {
-          self._gfmTableDynamicInterruptHack = false
-          return ok(code)
+      /** @type {State} */
+      function eatSpace(code) {
+        if (markdownSpace(code)) {
+          effects.consume(code);
+          return eatSpace;
         }
-      )(code)
+        effects.exit(types.whitespace);
+        return cellStart(code);
+      }
     }
+
+    /** @type {State} */
+    function contentStart(code) {
+      if (code === codes.dash) {
+        _align = 'none';
+        return fillerStart(code);
+      }
+
+      if (code === codes.colon) {
+        effects.enter('tableDelimiterAlignment');
+        effects.consume(code);
+        effects.exit('tableDelimiterAlignment');
+        _align = 'left';
+        return fillerStart;
+      }
+
+      return self.nok(code);
+    }
+
+    /** @type {State} */
+    function fillerStart(code) {
+      if (code === codes.dash) {
+        effects.enter('tableDelimiterFiller');
+        effects.consume(code);
+        return eatFiller;
+      }
+      return self.nok(code);
+
+      /** @type {State} */
+      function eatFiller(code) {
+        if (code === codes.dash) {
+          effects.consume(code);
+          return eatFiller;
+        }
+
+        effects.exit('tableDelimiterFiller');
+        return fillerEnd(code);
+      }
+    }
+
+    /** @type {State} */
+    function fillerEnd(code) {
+      if (code === codes.colon) {
+        effects.enter('tableDelimiterAlignment');
+        effects.consume(code);
+        _align = _align === 'left' ? 'center' : 'right';
+        effects.exit('tableDelimiterAlignment');
+        return contentEnd;
+      }
+      return contentEnd(code);
+    }
+
+    /** @type {State} */
+    function contentEnd(code) {
+      return cellEnd(code);
+    }
+
+    /** @type {State} */
+    function cellEnd(code) {
+      if (markdownSpace(code)) {
+        effects.enter(types.whitespace);
+        return eatSpace(code);
+      }
+
+      align.push(_align);
+      if (markdownLineEnding(code) || code === codes.eof) {
+        return rowEnd(code);
+      }
+
+      if (code === codes.verticalBar) {
+        return divider(code);
+      }
+
+      return self.nok(code);
+
+      /** @type {State} */
+      function eatSpace(code) {
+        if (markdownSpace(code)) {
+          effects.consume(code);
+          return eatSpace;
+        }
+        effects.exit(types.whitespace);
+        return cellEnd(code);
+      }
+    }
+
+    /***********************************************
+    * End of delimiter row - close and check that delimiters match
+    * cols if GFM format
+    * @type {State}
+    */
+    function rowEnd(code) {
+      if (!lastColCount && code === codes.eof) return self.nok(code);
+      if (lastColCount && lastColCount !== align.length) return self.nok(code);
+      effects.exit('tableDelimiterRow');
+      effects.enter(types.lineEnding);
+      effects.consume(code);
+      effects.exit(types.lineEnding);
+      return nextLine;
+
+      /** @type {State} */
+      function nextLine(code) {
+        if (tableContinues(self, code)) return body(code);
+        return lastColCount ? self.ok(code) : self.nok(code);
+      }
+    }
+
   }
-}
 
-/** @type {Tokenizer} */
-function tokenizeNextPrefixedOrBlank(effects, ok, nok) {
-  let size = 0
-
-  return start
+  /** @type {Tokenizer} */
+  function tokenizeBody(effects, ok, nok) {
+    // @ts-ignore
+    self = this; // Has to be set as tokenizers are called with an object
+    self.nok = nok;
+    self.ok = ok;
+    align.length = 0;
+    return body;
+  }
 
   /** @type {State} */
-  function start(code) {
-    // This is a check, so we don’t care about tokens, but we open a bogus one
-    // so we’re valid.
-    effects.enter('check')
-    // EOL.
-    effects.consume(code)
-    return whitespace
+  function body(code) {
+    effects.enter('tableBody');
+    return bodyRow(code);
   }
 
-  /** @type {State} */
-  function whitespace(code) {
-    if (code === codes.virtualSpace || code === codes.space) {
-      effects.consume(code)
-      size++
-      return size === constants.tabSize ? ok : whitespace
+  /***********************************************
+   * Tokenize line as body
+   * @type {State}
+   */
+  function bodyRow(code) {
+    effects.enter('tableRow');
+    return nonDelimiterRow(rowEnd, code);
+
+    /***********************************************
+    * End of body row - close and check that table is not
+    * interrupted on next line
+    * @type {State}
+    */
+    function rowEnd(code) {
+      effects.exit('tableRow');
+      if (!lastColCount) return self.nok(code);
+      if (code === codes.eof) return bodyClose(code);
+      effects.enter(types.lineEnding);
+      effects.consume(code);
+      effects.exit(types.lineEnding);
+      return nextLine;
+
+      /** @type {State} */
+      function nextLine(code) {
+        if (tableContinues(self, code)) { return bodyRow(code); }
+        return bodyClose(code);
+      }
+
     }
 
-    // EOF or whitespace
-    if (code === codes.eof || markdownLineEndingOrSpace(code)) {
-      return ok(code)
+    /** @type {State} */
+    function bodyClose(code) {
+      effects.exit('tableBody');
+      return self.ok(code);
+    }
+  }
+
+  /***********************************************
+   * Tokenize header or body row (row internal logic is identical)
+   * @param {State} rowEnd function to be called at end of row
+   * @param {Code} code first code in row
+   * @returns {void|State}
+   */
+  function nonDelimiterRow(rowEnd, code) {
+    let leadingDivider = 0; // 0 or 1 leading dividers
+    let dividerCount = 0; // total # of dividers
+    let trailingDivider = 0; // 0 or 1 trailing dividers
+    if (code === codes.verticalBar) {
+      leadingDivider = 1;
+      return divider(code);
+    }
+    return cell(code);
+
+    /***********************************************
+     * Tokenize and consume divider, continue to cell start
+     * @type {State}
+     */
+    function divider(code) {
+      effects.enter('tableCellDivider');
+      effects.consume(code);
+      effects.exit('tableCellDivider');
+      dividerCount++;
+      trailingDivider = 1; // Set to 0 when nonWhitespace discovered in cell
+      return cell;
     }
 
-    // Anything else.
-    return nok(code)
+    /***********************************************
+     * Tokenize any left space and continue to content
+     * @type {State}
+     */
+    function cell(code) {
+      if(code === codes.verticalBar || markdownLineEnding(code) || code === codes.eof) {
+        return cellEnd(code);
+      }
+      if (markdownSpace(code)) {
+        effects.enter(types.whitespace);
+        return eatSpace(code);
+      }
+      trailingDivider = 0;
+      effects.enter('temporaryTableCellContent');
+      if (code === codes.backslash) {
+        effects.consume(code);
+        return eatEscapedContent;
+      }
+      return eatContent(code);  
+
+      /** @type {State} */
+      function eatSpace(code) {
+        if (markdownSpace(code)) {
+          effects.consume(code);
+          return eatSpace;
+        }
+        effects.exit(types.whitespace);
+        return cell(code);
+      }
+
+      /** @type {State} */
+      function eatContent(code) {
+        if (markdownTableCellContent(code)) {
+          effects.consume(code);
+          return eatContent;
+        }
+        effects.exit('temporaryTableCellContent');
+        return cell(code);
+      }
+
+      /** @type {State} */
+      function eatEscapedContent(code) {
+        if (code === codes.backslash || code === codes.verticalBar) {
+          effects.consume(code);
+          return eatContent;
+        }
+        return eatContent(code);
+      }
+    }
+
+    /**
+     * End of cell, continue to next
+     * @type {State}
+     */
+    function cellEnd(code) {
+      if (markdownLineEnding(code) || code === codes.eof) {
+        lastColCount = dividerCount > (leadingDivider + trailingDivider) || (leadingDivider && trailingDivider)
+          ? lastColCount = dividerCount + 1 - (leadingDivider + trailingDivider)
+          : 0;
+        return rowEnd(code);
+      }
+      return divider(code);
+    }
+  }
+
+  /***********************************************
+   * Close table and return self.ok()
+   * @type {State}
+   */
+  function tableClose(code) {
+    effects.exit('table');
+    return self.ok(code);
+  }
+
+  /***********************************************
+   * Tokenize line ending and return whether the table continues.
+   * @param {*} self 
+   * @param {Code} code 
+   * @returns {Boolean}
+   */
+  function tableContinues(self, code) {
+    // Blank lines interrupts table (and can have no chars).
+    if (self.parser.lazy[self.now().line] || markdownLineEnding(code) || code === codes.eof) {
+      return false;
+    }
+
+    // Indented code interrupts table.
+    const tail = self.events[self.events.length - 1];
+    if (!self.parser.constructs.disable.null.includes('codeIndented')
+      && tail
+      && tail[1].type === types.linePrefix
+      && tail[2].sliceSerialize(tail[1], true).length >= constants.tabSize) {
+      return false;
+    }
+
+    // Block level constructs interupts table
+    if (self.parser.constructs.flow?.code) {
+      return false;
+    }
+
+    return true;
   }
 }
