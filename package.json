@@ -1,7 +1,7 @@
 {
-  "name": "micromark-extension-gfm-table",
+  "name": "micromark-extension-extended-table",
   "version": "1.0.5",
-  "description": "micromark extension to support GFM tables",
+  "description": "micromark-extension-gfm-table fork adding headerless tables",
   "license": "MIT",
   "keywords": [
     "micromark",
@@ -15,15 +15,15 @@
     "markdown",
     "unified"
   ],
-  "repository": "micromark/micromark-extension-gfm-table",
-  "bugs": "https://github.com/micromark/micromark-extension-gfm-table/issues",
+  "repository": "TRIAEIOU/micromark-extension-extended-table",
   "funding": {
     "type": "opencollective",
     "url": "https://opencollective.com/unified"
   },
   "author": "Titus Wormer <tituswormer@gmail.com> (https://wooorm.com)",
   "contributors": [
-    "Titus Wormer <tituswormer@gmail.com> (https://wooorm.com)"
+    "Titus Wormer <tituswormer@gmail.com> (https://wooorm.com)",
+    "https://github.com/TRIAEIOU"
   ],
   "sideEffects": false,
   "type": "module",
