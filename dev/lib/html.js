@@ -15,7 +15,7 @@ const alignment = {
  *
  * @type {HtmlExtension}
  */
-export const extendedTableHtml = {
+export const xTableHtml = {
   enter: {
     table(token) {
       /** @type {Array<Align>} */
@@ -146,12 +146,11 @@ export const extendedTableHtml = {
         this.tag('<th' + alignment[tableAlign[tableColumn]] + '></th>')
         tableColumn++
       }
-      
+
       this.setData('tableColumn', tableColumn)
       this.lineEndingIfNeeded()
       this.tag('</tr>')
-
-    } 
+    }
   }
 }
 
