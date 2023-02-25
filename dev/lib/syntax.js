@@ -173,8 +173,11 @@ function tokenizeTable(effects, ok, nok) {
 
   /** @type {State} */
   function start(code) {
+    const effect = effects.enter('table')
     // @ts-expect-error Custom.
-    effects.enter('table')._align = align
+    effect._align = align
+    // @ts-expect-error Custom.
+    effect._noHeader = true // used in mdast-to-hast/lib/table.js
     effects.enter('tableDelimiterRow')
     return atDelimiterRowBreak(code)
   }
