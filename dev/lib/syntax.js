@@ -27,7 +27,7 @@ import {types} from 'micromark-util-symbol/types.js'
  * @type {Extension}
  */
 export const xtable = {
-  flow: {null: {tokenize: tokenizeTable, resolve: resolveTable}}
+  flow: {null: {tokenize: tokenizexTable, resolve: resolvexTable}}
 }
 
 const nextPrefixedOrBlank = {
@@ -37,7 +37,7 @@ const nextPrefixedOrBlank = {
 
 /** @type {Resolver} */
 // eslint-disable-next-line complexity
-function resolveTable(events, context) {
+function resolvexTable(events, context) {
   let index = -1
   /** @type {boolean|undefined} */
   let inHead
@@ -162,7 +162,7 @@ function resolveTable(events, context) {
 }
 
 /** @type {Tokenizer} */
-function tokenizeTable(effects, ok, nok) {
+function tokenizexTable(effects, ok, nok) {
   const self = this
   /** @type {Array<Align>} */
   const align = []
