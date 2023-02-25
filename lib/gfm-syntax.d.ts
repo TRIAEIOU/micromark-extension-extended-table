@@ -1,8 +1,4 @@
-/**
- * Syntax extension for micromark (passed in `extensions`).
- *
- * @type {Extension}
- */
+/** @type {Extension} */
 export const gfmTable: Extension;
 export type Extension = import('micromark-util-types').Extension;
 export type Resolver = import('micromark-util-types').Resolver;
