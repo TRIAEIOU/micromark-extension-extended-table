@@ -21,11 +21,7 @@ import {codes} from 'micromark-util-symbol/codes.js'
 import {constants} from 'micromark-util-symbol/constants.js'
 import {types} from 'micromark-util-symbol/types.js'
 
-/**
- * Syntax extension for micromark (passed in `extensions`).
- *
- * @type {Extension}
- */
+/** @type {Extension} */
 export const gfmTable = {
   flow: {null: {tokenize: tokenizeTable, resolve: resolveTable}}
 }
@@ -36,7 +32,6 @@ const nextPrefixedOrBlank = {
 }
 
 /** @type {Resolver} */
-// eslint-disable-next-line complexity
 function resolveTable(events, context) {
   let index = -1
   /** @type {boolean|undefined} */
