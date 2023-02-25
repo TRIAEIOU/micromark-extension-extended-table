@@ -15,7 +15,7 @@ const alignment = {
  *
  * @type {HtmlExtension}
  */
-export const xTableHtml = {
+export const xtableHtml = {
   enter: {
     table(token) {
       /** @type {Array<Align>} */

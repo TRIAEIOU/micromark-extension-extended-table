@@ -3,6 +3,6 @@
  *
  * @type {HtmlExtension}
  */
-export const xTableHtml: HtmlExtension;
+export const xtableHtml: HtmlExtension;
 export type HtmlExtension = import('micromark-util-types').HtmlExtension;
 export type Align = import('./syntax.js').Align;

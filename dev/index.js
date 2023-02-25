@@ -1,2 +1,2 @@
-export {xTableHtml} from './lib/html.js'
-export {xTable} from './lib/syntax.js'
+export {xtableHtml} from './lib/html.js'
+export {xtable} from './lib/syntax.js'
