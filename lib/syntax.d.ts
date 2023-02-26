@@ -3,7 +3,7 @@
  *
  * @type {Extension}
  */
-export const gfmTable: Extension;
+export const xtable: Extension;
 export type Extension = import('micromark-util-types').Extension;
 export type Resolver = import('micromark-util-types').Resolver;
 export type Tokenizer = import('micromark-util-types').Tokenizer;

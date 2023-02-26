@@ -26,7 +26,7 @@ import {types} from 'micromark-util-symbol/types.js'
  *
  * @type {Extension}
  */
-export const gfmTable = {
+export const xtable = {
   flow: {null: {tokenize: tokenizeTable, resolve: resolveTable}}
 }
 

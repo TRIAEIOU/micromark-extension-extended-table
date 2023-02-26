@@ -1,2 +1,2 @@
-export {gfmTableHtml} from './lib/html.js'
-export {gfmTable} from './lib/syntax.js'
+export {xtableHtml} from './lib/html.js'
+export {xtable} from './lib/syntax.js'

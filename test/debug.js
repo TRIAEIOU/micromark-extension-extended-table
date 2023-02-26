@@ -1,6 +1,6 @@
 import test from 'tape'
 import {micromark} from 'micromark'
-import {gfmTable as syntax, gfmTableHtml as html} from '../dev/index.js'
+import {xtable as syntax, xtableHtml as html} from '../dev/index.js'
 
 test('markdown -> html (micromark)', (t) => {
   t.deepEqual(
