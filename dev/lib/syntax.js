@@ -205,7 +205,7 @@ function tokenizeTable(effects, ok, nok) {
     // @ts-expect-error Custom.
     effect._align = align
     // @ts-expect-error Custom.
-    effect.headless = true // Used in mdast-to-hast/lib/table.js
+    effect._headless = true // Used in mdast-to-hast/lib/table.js
     effects.enter('tableDelimiterRow')
     return atDelimiterRowBreak(code)
   }
