@@ -163,7 +163,11 @@ function resolveTable(events, context) {
 
 /** @type {Tokenizer} */
 function tokenizeTable(effects, ok, nok) {
+  // @ts-ignore whatever
   const self = this
+  const _effects = effects
+  const _ok = ok
+  const _nok = nok
   /** @type {Array<Align>} */
   const align = []
   let tableHeaderCount = 0
@@ -172,7 +176,46 @@ function tokenizeTable(effects, ok, nok) {
   /** @type {boolean|undefined} */
   let hasDash
 
-  return start
+  return startAttempt
+
+  /** @type {State} */
+  function startAttempt(code) {
+    return _effects.attempt(
+      [
+        {tokenize: tokenize, partial: false},
+        {tokenize: tokenizeDelimiter, partial: false}
+      ],
+      _ok,
+      _nok
+    )(code)
+  }
+
+  /** @type {Tokenizer} */
+  function tokenizeDelimiter(_effects, _ok, _nok) {
+    effects = _effects
+    ok = _ok
+    nok = _nok
+    return startDelimiter
+  }
+
+  /** @type {State} */
+  function startDelimiter(code) {
+    const effect = effects.enter('table')
+    // @ts-expect-error Custom.
+    effect._align = align
+    // @ts-expect-error Custom.
+    effect._noHead = true // Used in mdast-to-hast/lib/table.js
+    effects.enter('tableDelimiterRow')
+    return atDelimiterRowBreak(code)
+  }
+
+  /** @type {Tokenizer} */
+  function tokenize(_effects, _ok, _nok) {
+    effects = _effects
+    ok = _ok
+    nok = _nok
+    return start
+  }
 
   /** @type {State} */
   function start(code) {
