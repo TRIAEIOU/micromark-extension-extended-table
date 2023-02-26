@@ -182,7 +182,7 @@ function tokenizeTable(effects, ok, nok) {
   function startAttempt(code) {
     return _effects.attempt(
       [
-        {tokenize: tokenize, partial: false},
+        {tokenize, partial: false},
         {tokenize: tokenizeDelimiter, partial: false}
       ],
       _ok,
@@ -200,6 +200,7 @@ function tokenizeTable(effects, ok, nok) {
 
   /** @type {State} */
   function startDelimiter(code) {
+    if (self.interrupt) return nok(code) // Abort if already in full table
     const effect = effects.enter('table')
     // @ts-expect-error Custom.
     effect._align = align

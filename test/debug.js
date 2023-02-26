@@ -4,7 +4,7 @@ import {gfmTable as syntax, gfmTableHtml as html} from '../dev/index.js'
 
 test('markdown -> html (micromark)', (t) => {
   t.deepEqual(
-    micromark('|0|\n|-|\n|1|', {
+    micromark('|0|\n|-|\n|1|\n\n\n|-|\n|2|', {
       extensions: [syntax],
       htmlExtensions: [html]
     }),

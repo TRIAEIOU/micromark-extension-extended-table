@@ -1,31 +1,30 @@
 {
-    // Detailed docs:
-    // https://code.visualstudio.com/docs/nodejs/nodejs-debugging
-    "version": "2.0.0",
-    "configurations": [
-        {
-            "name": "Debug",
-            "type": "node",
-            "request": "launch",
-            "smartStep": true,
-            "sourceMaps": true,
-            "args": [
-                "${workspaceRoot}/test/debug.js"
-            ],
-            "runtimeArgs": [
-                "--conditions", "development", // micromark debug
-            ],
-            "cwd": "${workspaceRoot}",
-            "internalConsoleOptions": "openOnSessionStart",
-            "env": {
-                "DEBUG": "*" // micromark debug log
-            },
-            "skipFiles": [
-                "<node_internals>/**",
-                //"${workspaceRoot}/node_modules/**",
-            ],
-            "outputCapture": "std",
-            "stopOnEntry": false
-        }
-    ],
+  // Detailed docs:
+  // https://code.visualstudio.com/docs/nodejs/nodejs-debugging
+  "version": "2.0.0",
+  "configurations": [
+    {
+      "name": "Debug",
+      "type": "node",
+      "request": "launch",
+      "smartStep": true,
+      "sourceMaps": true,
+      "args": ["${workspaceRoot}/test/debug.js"],
+      "runtimeArgs": [
+        "--conditions",
+        "development" // micromark debug
+      ],
+      "cwd": "${workspaceRoot}",
+      "internalConsoleOptions": "openOnSessionStart",
+      "env": {
+        "DEBUG": "*" // micromark debug log
+      },
+      "skipFiles": [
+        "<node_internals>/**"
+        //"${workspaceRoot}/node_modules/**",
+      ],
+      "outputCapture": "std",
+      "stopOnEntry": false
+    }
+  ]
 }
